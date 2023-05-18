@@ -22,7 +22,7 @@ In a terminal (in the root directory), run...
 
 Using postman, or another util make a `post` request to `127.0.0.1:8080/encrypt`. You will need to set a json body like the following...
 
-```
+```json
 {
     "id": "vrindisbacher",
     "value": "hello world"
