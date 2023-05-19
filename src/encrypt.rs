@@ -1,55 +1,68 @@
-use std::str::Chars;
-
-use itertools::{self, Chunk, Itertools};
-
 use utils::{binary_rep_to_u32, get_salt, is_multiple_of_512, string_to_binary, u32_to_binary};
 mod utils;
 
-fn pad(mut value: String) -> String {
-    value.push_str("1");
-    let original_size: usize = value.len();
+fn pad(mut value: Vec<u8>) -> Vec<u8> {
+    value.push(1);
+    let original_size = value.len();
 
     // start by padding until we have a multiple of 512 (less 64 bits)
     while !(is_multiple_of_512(value.len() + 64)) {
-        value.push_str("0");
+        value.push(0);
     }
 
     // now add the last 64 bits by using big endian rep of value size
-    let big_endian_rep_of_orig_size = format!("{original_size:b}");
+    let bits = std::mem::size_of::<usize>() * 8;
+    let mut big_endian_rep_of_orig_size = vec![];
+    for i in 0..bits {
+        big_endian_rep_of_orig_size.push(u8::try_from((original_size >> i) & 1).unwrap());
+    }
+
     let num_to_pad = 64 - big_endian_rep_of_orig_size.len();
 
     for _ in 0..num_to_pad {
-        value.push_str("0");
+        value.push(0);
     }
-    value.push_str(&big_endian_rep_of_orig_size);
+
+    value.append(&mut big_endian_rep_of_orig_size);
 
     value
 }
 
-fn array_of_32_bit_words_from_chunk(chunk: Chunk<Chars>) -> Vec<String> {
+fn array_of_32_bit_words_from_chunk(chunk: &[u8]) -> [[u8; 32]; 64] {
     // todo - make this not on the heap since it is known size
-    let mut array = vec![];
-    let mut curr_word = "".to_owned();
+    let mut array : [[u8; 32]; 64] = [[0; 32]; 64];
+    let mut curr_word : [u8; 32] = [0; 32];
+
+    let mut array_idx = 0;
+    let mut count = 0;
     for char in chunk {
-        curr_word += &char.to_string();
-        if curr_word.len() == 32 {
-            array.push(curr_word);
-            curr_word = "".to_owned();
+        curr_word[count] = *char; 
+        count += 1;
+        if count == 31 {
+            array[array_idx] = curr_word; 
+            array_idx += 1; 
+            curr_word = [0; 32];
+            count = 0;
         }
     }
+
     // add 48 more 32 bit words
-    let mut s = String::with_capacity(32);
-    for _ in [..48 * 32] {
-        s += "0";
-        if s.len() == 32 {
-            array.push(s.to_owned());
-            s.clear();
+    let mut s : [u8; 32] = [0; 32];
+    let mut array_idx = 16;
+    let mut count = 0;
+    for _ in 0..(48 * 32) {
+        s[count] = 0;
+        if count == 31 {
+            array[array_idx] = s; 
+            array_idx += 1; 
+            s = [0; 32]; 
+            count = 0; 
         }
     }
     array
 }
 
-fn hash(value: String) -> String {
+fn hash(value: Vec<u8>) -> String {
     let mut h0: u32 = 0x6a09e667;
     let mut h1: u32 = 0xbb67ae85;
     let mut h2: u32 = 0x3c6ef372;
@@ -72,7 +85,7 @@ fn hash(value: String) -> String {
         0xc67178f2,
     ];
 
-    for chunk in &value.chars().chunks(512) {
+    for chunk in value.chunks(512) {
         let mut a = h0;
         let mut b = h1;
         let mut c = h2;
@@ -85,15 +98,15 @@ fn hash(value: String) -> String {
         let mut array_of_words = array_of_32_bit_words_from_chunk(chunk);
 
         for i in 16..64 {
-            let temp1 = binary_rep_to_u32(&array_of_words[i - 15]);
+            let temp1 = binary_rep_to_u32(&mut array_of_words[i - 15]);
             let s0 = (temp1.rotate_right(7)) ^ (temp1.rotate_right(18)) ^ (temp1 >> 3);
-            let temp2 = binary_rep_to_u32(&array_of_words[i - 2]);
+            let temp2 = binary_rep_to_u32(&mut array_of_words[i - 2]);
             let s1 = (temp2.rotate_right(17)) ^ (temp2.rotate_right(19)) ^ (temp2 >> 10);
-            let temp3 = binary_rep_to_u32(&array_of_words[i - 16]);
-            let temp4 = binary_rep_to_u32(&array_of_words[i - 7]);
-            array_of_words.push(u32_to_binary(
+            let temp3 = binary_rep_to_u32(&mut array_of_words[i - 16]);
+            let temp4 = binary_rep_to_u32(&mut array_of_words[i - 7]);
+            array_of_words[i] = u32_to_binary(
                 temp3.wrapping_add(s0).wrapping_add(temp4).wrapping_add(s1),
-            ));
+            );
         }
 
         for i in 0..64 {
@@ -103,7 +116,7 @@ fn hash(value: String) -> String {
                 .wrapping_add(s1)
                 .wrapping_add(ch)
                 .wrapping_add(k[i])
-                .wrapping_add(binary_rep_to_u32(&array_of_words[i]));
+                .wrapping_add(binary_rep_to_u32(&mut array_of_words[i]));
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
@@ -142,11 +155,10 @@ pub struct HashResult {
 pub fn sha_256(value: &String) -> HashResult {
     let mut salt = get_salt();
     salt.push_str(value);
-    let owned_salt = salt.to_owned();
-    let binary_rep = string_to_binary(salt);
+    let binary_rep = string_to_binary(&salt);
     let padded_binary_rep = pad(binary_rep);
     HashResult {
-        salt : owned_salt, 
+        salt, 
         hash: hash(padded_binary_rep)
     }
 }

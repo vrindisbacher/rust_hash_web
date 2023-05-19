@@ -39,6 +39,8 @@ async fn encrypt(encrypt_data: web::Json<Encrypt>) -> Result<String> {
         hash: hash_value,
     } = sha_256(value_to_encrypt);
 
+    println!("{}", hash_value);
+
     // insert to db now
     let connection = &mut establish_connection();
 
@@ -52,7 +54,7 @@ async fn encrypt(encrypt_data: web::Json<Encrypt>) -> Result<String> {
     let res = create_new_auth(connection, new_auth);
     match res {
         Ok(_) => Ok(format!("Success!")),
-        Err(_) => Ok(format!("whoops"))
+        Err(e) => Ok(format!("{}", e))
     }
 }
 
