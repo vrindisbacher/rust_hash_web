@@ -30,33 +30,33 @@ fn pad(mut value: Vec<u8>) -> Vec<u8> {
 
 fn array_of_32_bit_words_from_chunk(chunk: &[u8]) -> [[u8; 32]; 64] {
     // todo - make this not on the heap since it is known size
-    let mut array : [[u8; 32]; 64] = [[0; 32]; 64];
-    let mut curr_word : [u8; 32] = [0; 32];
+    let mut array: [[u8; 32]; 64] = [[0; 32]; 64];
+    let mut curr_word: [u8; 32] = [0; 32];
 
     let mut array_idx = 0;
     let mut count = 0;
     for char in chunk {
-        curr_word[count] = *char; 
+        curr_word[count] = *char;
         count += 1;
         if count == 31 {
-            array[array_idx] = curr_word; 
-            array_idx += 1; 
+            array[array_idx] = curr_word;
+            array_idx += 1;
             curr_word = [0; 32];
             count = 0;
         }
     }
 
     // add 48 more 32 bit words
-    let mut s : [u8; 32] = [0; 32];
+    let mut s: [u8; 32] = [0; 32];
     let mut array_idx = 16;
     let mut count = 0;
     for _ in 0..(48 * 32) {
         s[count] = 0;
         if count == 31 {
-            array[array_idx] = s; 
-            array_idx += 1; 
-            s = [0; 32]; 
-            count = 0; 
+            array[array_idx] = s;
+            array_idx += 1;
+            s = [0; 32];
+            count = 0;
         }
     }
     array
@@ -104,9 +104,8 @@ fn hash(value: Vec<u8>) -> String {
             let s1 = (temp2.rotate_right(17)) ^ (temp2.rotate_right(19)) ^ (temp2 >> 10);
             let temp3 = binary_rep_to_u32(&mut array_of_words[i - 16]);
             let temp4 = binary_rep_to_u32(&mut array_of_words[i - 7]);
-            array_of_words[i] = u32_to_binary(
-                temp3.wrapping_add(s0).wrapping_add(temp4).wrapping_add(s1),
-            );
+            array_of_words[i] =
+                u32_to_binary(temp3.wrapping_add(s0).wrapping_add(temp4).wrapping_add(s1));
         }
 
         for i in 0..64 {
@@ -148,7 +147,7 @@ fn hash(value: Vec<u8>) -> String {
 }
 
 pub struct HashResult {
-    pub salt: String, 
+    pub salt: String,
     pub hash: String,
 }
 
@@ -158,7 +157,7 @@ pub fn sha_256(value: &String) -> HashResult {
     let binary_rep = string_to_binary(&salt);
     let padded_binary_rep = pad(binary_rep);
     HashResult {
-        salt, 
-        hash: hash(padded_binary_rep)
+        salt,
+        hash: hash(padded_binary_rep),
     }
 }
