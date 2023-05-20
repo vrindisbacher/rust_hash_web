@@ -1,4 +1,7 @@
-use utils::{binary_rep_to_u32, get_salt, is_multiple_of_512, string_to_binary, u32_to_binary};
+use utils::{
+    binary_rep_to_u32, get_salt, is_multiple_of_512, string_to_binary, u32_to_binary,
+    ValuePassedMismatch,
+};
 mod utils;
 
 fn pad(mut value: Vec<u8>) -> Vec<u8> {
@@ -29,7 +32,6 @@ fn pad(mut value: Vec<u8>) -> Vec<u8> {
 }
 
 fn array_of_32_bit_words_from_chunk(chunk: &[u8]) -> [[u8; 32]; 64] {
-    // todo - make this not on the heap since it is known size
     let mut array: [[u8; 32]; 64] = [[0; 32]; 64];
     let mut curr_word: [u8; 32] = [0; 32];
 
@@ -149,15 +151,38 @@ fn hash(value: Vec<u8>) -> String {
 pub struct HashResult {
     pub salt: String,
     pub hash: String,
+    pub encryption_algorithm: String,
+}
+
+fn sha_256_on_salted_value(value: &String) -> String {
+    let binary_rep = string_to_binary(value);
+    let padded_binary_rep = pad(binary_rep);
+    hash(padded_binary_rep)
 }
 
 pub fn sha_256(value: &String) -> HashResult {
     let mut salt = get_salt();
+    let salt_to_return = salt.clone();
     salt.push_str(value);
-    let binary_rep = string_to_binary(&salt);
-    let padded_binary_rep = pad(binary_rep);
+    let hash = sha_256_on_salted_value(&salt);
     HashResult {
-        salt,
-        hash: hash(padded_binary_rep),
+        salt : salt_to_return,
+        hash,
+        encryption_algorithm: String::from("sha256"),
+    }
+}
+
+pub fn check_sha_256(
+    salt: &mut String,
+    passed_value: &String,
+    encrypted_value: &String,
+) -> Result<(), ValuePassedMismatch> {
+    salt.push_str(passed_value);
+    println!("{}", sha_256_on_salted_value(salt));
+    println!("{}", *encrypted_value);
+    if sha_256_on_salted_value(salt) == *encrypted_value {
+        Ok(())
+    } else {
+        Err(ValuePassedMismatch)
     }
 }

@@ -1,61 +1,44 @@
+use self::db::{create_new_auth, get_hashed_value_by_id};
 use self::encrypt::{sha_256, HashResult};
-use self::models::NewAuth;
-use actix_web::{error, web, App, HttpResponse, HttpServer, Result};
+use actix_web::{error, web, App, HttpResponse, HttpServer};
 
-use diesel::prelude::*;
-use diesel::sqlite::{SqliteConnection};
-use dotenvy::dotenv;
+use encrypt::check_sha_256;
 use serde::Deserialize;
-use std::env;
 
+mod db;
 mod encrypt;
-mod models;
-mod schema;
 
 #[derive(Deserialize)]
-struct Encrypt {
+struct ValueIdPair {
     value: String,
     id: String,
 }
 
-fn establish_connection() -> SqliteConnection {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
-}
-
-fn create_new_auth(conn: &mut SqliteConnection, new_auth: NewAuth) -> QueryResult<usize> {
-    diesel::insert_into(schema::auth::table)
-        .values(&new_auth)
-        .execute(conn)
-}
-
-async fn encrypt(encrypt_data: web::Json<Encrypt>) -> Result<String> {
+async fn encrypt(encrypt_data: web::Json<ValueIdPair>) -> HttpResponse {
     let value_to_encrypt = &encrypt_data.value;
     let HashResult {
-        salt: salt_value,
-        hash: hash_value,
+        salt,
+        hash,
+        encryption_algorithm,
     } = sha_256(value_to_encrypt);
 
-    println!("{}", hash_value);
-
-    // insert to db now
-    let connection = &mut establish_connection();
-
-    let new_auth = NewAuth {
-        id: &encrypt_data.id,
-        salt: &salt_value,
-        hashed_value: &hash_value,
-        encryption_algorithm: "sha256",
-    };
-
-    let res = create_new_auth(connection, new_auth);
+    let res = create_new_auth(&encrypt_data.id, &salt, &hash, &encryption_algorithm);
     match res {
-        Ok(_) => Ok(format!("Success!")),
-        Err(e) => Ok(format!("{}", e))
+        Ok(_) => HttpResponse::Accepted().body("Success! Value has been stored"),
+        Err(_) => HttpResponse::InternalServerError().body("The provided ID already exists"),
     }
+}
+
+async fn check(data_to_check: web::Json<ValueIdPair>) -> HttpResponse {
+    let passed_value = &data_to_check.value;
+    let passed_id = &data_to_check.id;
+
+    let Ok(row) = get_hashed_value_by_id(passed_id) else { return HttpResponse::InternalServerError().body("Failed to find record with provided id") };
+
+    let mut salt = row.salt;
+    let Ok(_) = check_sha_256(&mut salt, passed_value, &row.hashed_value) else { return HttpResponse::Unauthorized().body("Value does not match") };
+
+    HttpResponse::Accepted().body("Success!")
 }
 
 #[actix_web::main]
@@ -68,12 +51,10 @@ async fn main() -> std::io::Result<()> {
                 error::InternalError::from_response(err, HttpResponse::Conflict().finish()).into()
             });
 
-        App::new().service(
-            web::resource("/encrypt")
-                // change json extractor configuration
-                .app_data(json_config)
-                .route(web::post().to(encrypt)),
-        )
+        App::new()
+            .app_data(json_config)
+            .route("/encrypt", web::post().to(encrypt))
+            .route("/check", web::post().to(check))
     })
     .bind(("127.0.0.1", 8080))?
     .run()

@@ -1,5 +1,6 @@
-use crate::schema::auth;
+use crate::db::schema::auth;
 use diesel::prelude::*;
+
 
 #[derive(Queryable)]
 pub struct AuthRow {

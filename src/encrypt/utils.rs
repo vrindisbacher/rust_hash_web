@@ -1,5 +1,18 @@
+use core::fmt;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use rand::{distributions::Alphanumeric, Rng};
+
+#[derive(Debug, Clone)]
+pub struct ValuePassedMismatch; 
+
+
+impl fmt::Display for ValuePassedMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "The value passed does not match the encryped value")
+    }
+}
+
 
 pub fn get_salt() -> String {
     rand::thread_rng()
