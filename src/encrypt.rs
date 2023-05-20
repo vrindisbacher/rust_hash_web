@@ -166,7 +166,7 @@ pub fn sha_256(value: &String) -> HashResult {
     salt.push_str(value);
     let hash = sha_256_on_salted_value(&salt);
     HashResult {
-        salt : salt_to_return,
+        salt: salt_to_return,
         hash,
         encryption_algorithm: String::from("sha256"),
     }
@@ -178,8 +178,6 @@ pub fn check_sha_256(
     encrypted_value: &String,
 ) -> Result<(), ValuePassedMismatch> {
     salt.push_str(passed_value);
-    println!("{}", sha_256_on_salted_value(salt));
-    println!("{}", *encrypted_value);
     if sha_256_on_salted_value(salt) == *encrypted_value {
         Ok(())
     } else {
